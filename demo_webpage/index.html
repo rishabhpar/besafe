@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset='utf-8' />
+  <title></title>
+  <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+  <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js'></script>
+  <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.auto.min.js"></script>
+  <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.css' rel='stylesheet' />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+  <script
+    src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.min.js"></script>
+  <link rel="stylesheet"
+    href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.css"
+    type="text/css" />
+  <!-- Promise polyfill script required to use Mapbox GL Geocoder in IE 11 -->
+  <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.auto.min.js"></script>
+  <div id='map'></div>
+  <script>
+    window.twttr = (function (d, s, id) {
+      var js, fjs = d.getElementsByTagName(s)[0],
+        t = window.twttr || {};
+      if (d.getElementById(id)) return t;
+      js = d.createElement(s);
+      js.id = id;
+      js.src = "https://platform.twitter.com/widgets.js";
+      fjs.parentNode.insertBefore(js, fjs);
+
+      t._e = [];
+      t.ready = function (f) {
+        t._e.push(f);
+      };
+
+      return t;
+    }(document, "script", "twitter-wjs"));
+  </script>
+  <script>
+    mapboxgl.accessToken = 'pk.eyJ1Ijoic3dhdGhpbWFubmVtIiwiYSI6ImNraTE4ZXNpejB4YWMzMHBlYTB1bDhnbjUifQ.lX_joQGN7K4TUao-XkGCCQ';
+    var map = new mapboxgl.Map({
+      container: 'map',
+      //style: 'mapbox://styles/swathimannem/cki6h5bnr3m1h1apc8h3fwoph',
+      style: 'mapbox://styles/mapbox/dark-v10',
+      center: [-98.5, 39.8],
+      zoom: 4.20
+    });
+
+    map.addControl(
+      new MapboxGeocoder({
+        accessToken: mapboxgl.accessToken,
+        mapboxgl: mapboxgl
+      }), 'top-left'
+    );
+    map.addControl(new mapboxgl.NavigationControl());
+
+    map.on('load', function () {
+
+      map.addSource('trees', {
+        type: 'geojson',
+        data: './tweets.geojson'
+      });
+
+      map.addLayer({
+        id: 'trees-heat',
+        type: 'heatmap',
+        source: 'trees',
+        maxzoom: 15,
+        paint: {
+          // increase weight as diameter breast height increases
+          'heatmap-weight': {
+            property: 'dbh',
+            type: 'exponential',
+            stops: [
+              [1, 0],
+              [62, 1]
+            ]
+          },
+          // increase intensity as zoom level increases
+          'heatmap-intensity': {
+            stops: [
+              [11, 1],
+              [15, 3]
+            ]
+          },
+          // assign color values be applied to points depending on their density
+          "heatmap-color": ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0, 0, 255, 0)", 0.1, "#ffffb2", 0.3, "#feb24c", 0.5, "#fd8d3c", 0.7, "#fc4e2a", 1, "#e31a1c"],
+
+          // increase radius as zoom increases
+          'heatmap-radius': {
+            stops: [
+              [11, 15],
+              [15, 20]
+            ]
+          },
+          // decrease opacity to transition into the circle layer
+          'heatmap-opacity': {
+            default: 1,
+            stops: [
+              [14, 1],
+              [15, 0]
+            ]
+          },
+        }
+      }, 'waterway-label');
+
+      map.addLayer({
+        id: 'trees-point',
+        type: 'circle',
+        source: 'trees',
+        minzoom: 12,
+        paint: {
+          // increase the radius of the circle as the zoom level and dbh value increases
+          'circle-radius': {
+            property: 'dbh',
+            type: 'exponential',
+            stops: [
+              [{ zoom: 15, value: 1 }, 10],
+              [{ zoom: 15, value: 62 }, 10],
+              [{ zoom: 22, value: 1 }, 20],
+              [{ zoom: 22, value: 62 }, 60],
+            ]
+          },
+          'circle-color':
+            '#FF3333'
+          ,
+          'circle-stroke-color': 'white',
+          'circle-stroke-width': 2,
+          'circle-opacity': {
+            stops: [
+              [14, 0],
+              [15, 1]
+            ]
+          }
+        }
+      }, 'waterway-label');
+    });
+
+    map.on('click', 'trees-point', function (e) {
+      new mapboxgl.Popup()
+        .setLngLat(e.features[0].geometry.coordinates)
+        .setHTML('<blockquote class="twitter-tweet"><p lang="en" dir="ltr"></p>&mdash;<a href=' + e.features[0].properties.url + '></a></blockquote>')
+        .addTo(map);
+      twttr.widgets.load()
+    });
+    map.on('mouseenter', 'trees-point', function (e) {
+      map.getCanvas().style.cursor = 'pointer';
+    });
+
+    // Change it back to a pointer when it leaves.
+    map.on('mouseleave', 'trees-point', function (e) {
+      map.getCanvas().style.cursor = '';
+    });
+
+    map.on('load', function () {
+      // Insert the layer beneath any symbol layer.
+      var layers = map.getStyle().layers;
+
+      var labelLayerId;
+      for (var i = 0; i < layers.length; i++) {
+        if (layers[i].type === 'symbol' && layers[i].layout['text-field']) {
+          labelLayerId = layers[i].id;
+          break;
+        }
+      }
+
+      map.addLayer(
+        {
+          'id': '3d-buildings',
+          'source': 'composite',
+          'source-layer': 'building',
+          'filter': ['==', 'extrude', 'true'],
+          'type': 'fill-extrusion',
+          'minzoom': 15,
+          'paint': {
+            'fill-extrusion-color': '#aaa',
+
+            // use an 'interpolate' expression to add a smooth transition effect to the
+            // buildings as the user zooms in
+            'fill-extrusion-height': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              15,
+              0,
+              15.05,
+              ['get', 'height']
+            ],
+            'fill-extrusion-base': [
+              'interpolate',
+              ['linear'],
+              ['zoom'],
+              15,
+              0,
+              15.05,
+              ['get', 'min_height']
+            ],
+            'fill-extrusion-opacity': 0.6
+          }
+        },
+        labelLayerId
+      );
+    });
+    
+  </script>
+</body>
+
+</html>

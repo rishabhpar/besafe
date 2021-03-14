@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title></title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.12.0/mapbox-gl.css' rel='stylesheet' />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      /* map takes up the right 2/3 of the screen  */
+      #map {
+        position: absolute;
+        border-left: 1px solid #fff;
+        top: 0;
+        bottom: 0;
+        left: 33.3333%;
+        width: 66.6666%;
+      }
+
+      /* sidebar takes up the left 1/3 of the width */
+      .sidebar{
+        position: absolute;
+        width: 33.3333%;
+        height: 100%;
+        top: 0;
+        left: 0;
+      }
+      
+      .pad2 {
+        padding: 20px;
+        -webkit-box-sizing: border-box;
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+      }
+
+      h1 {
+        font-size:22px;
+        margin:0;
+        font-weight:400;
+        line-height: 20px;
+        padding: 20px 2px;
+      }
+    </style>
+</head>
+<body>
+<!-- to search for things, this is geocoder -->
+<script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.min.js"></script>
+<link
+  rel="stylesheet"
+  href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.5.1/mapbox-gl-geocoder.css"
+  type="text/css"
+/>
+<script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/es6-promise@4/dist/es6-promise.auto.min.js"></script>
+
+<div class='sidebar'>
+  <div class='heading'>
+    <h1>Trending Dangerous Locations</h1>
+  </div>
+  <div id='listings' class='listings'></div>
+</div>
+
+<div id='map'></div>
+  <script>
+  window.twttr = (function(d, s, id) {
+    var js, fjs = d.getElementsByTagName(s)[0],
+      t = window.twttr || {};
+    if (d.getElementById(id)) return t;
+    js = d.createElement(s);
+    js.id = id;
+    js.src = "https://platform.twitter.com/widgets.js";
+    fjs.parentNode.insertBefore(js, fjs);
+  
+    t._e = [];
+    t.ready = function(f) {
+      t._e.push(f);
+    };
+  
+    return t;
+  }(document, "script", "twitter-wjs"));
+  </script>
+  <script>
+      // This will let you use the .remove() function later on
+          if (!('remove' in Element.prototype)) {
+        Element.prototype.remove = function() {
+          if (this.parentNode) {
+              this.parentNode.removeChild(this);
+          }
+        };
+      }
+    mapboxgl.accessToken = 'pk.eyJ1Ijoic3dhdGhpbWFubmVtIiwiYSI6ImNraTE4ZXNpejB4YWMzMHBlYTB1bDhnbjUifQ.lX_joQGN7K4TUao-XkGCCQ';
+    var map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/dark-v10',
+      center: [-79.999732, 40.4374],
+      zoom: 11
+    });
+
+    var tweets = {};
+    loadJSONFile(function(response) {
+    tweets = JSON.parse(response);
+    });
+
+    // tweets.features.forEach(function(tweet, i){
+    //   tweet.properties.id = i;
+    // });
+    
+    map.on('load', function() {
+
+    map.addSource('trees', {
+    type: 'geojson',
+    data: tweets,
+    });
+
+    // buildLocationList(tweets);
+
+    // to search for a specific place, geocoder in top right corner 
+    map.addControl(
+      new MapboxGeocoder({
+        accessToken: mapboxgl.accessToken,
+        mapboxgl: mapboxgl
+      })
+    );
+
+    map.addLayer({
+    id: 'trees-heat',
+    type: 'heatmap',
+    source: 'trees',
+    maxzoom: 15,
+    paint: {
+        // increase weight as diameter breast height increases
+        'heatmap-weight': {
+        property: 'dbh',
+        type: 'exponential',
+        stops: [
+            [1, 0],
+            [62, 1]
+        ]
+        },
+        // increase intensity as zoom level increases
+        'heatmap-intensity': {
+        stops: [
+            [11, 1],
+            [15, 3]
+        ]
+        },
+        // assign color values be applied to points depending on their density
+        'heatmap-color': [
+        'interpolate',
+        ['linear'],
+        ['heatmap-density'],
+        0, 'rgba(236,222,239,0)',
+        0.2, 'rgb(208,209,230)',
+        0.4, 'rgb(166,189,219)',
+        0.6, 'rgb(103,169,207)',
+        0.8, 'rgb(28,144,153)'
+        ],
+        // increase radius as zoom increases
+        'heatmap-radius': {
+        stops: [
+            [11, 15],
+            [15, 20]
+        ]
+        },
+        // decrease opacity to transition into the circle layer
+        'heatmap-opacity': {
+        default: 1,
+        stops: [
+            [14, 1],
+            [15, 0]
+        ]
+        },
+    }
+    }, 'waterway-label');
+
+    map.addLayer({
+    id: 'trees-point',
+    type: 'circle',
+    source: 'trees',
+    minzoom: 14,
+    paint: {
+        // increase the radius of the circle as the zoom level and dbh value increases
+        'circle-radius': {
+        property: 'dbh',
+        type: 'exponential',
+        stops: [
+            [{ zoom: 15, value: 1 }, 5],
+            [{ zoom: 15, value: 62 }, 10],
+            [{ zoom: 22, value: 1 }, 20],
+            [{ zoom: 22, value: 62 }, 50],
+        ]
+        },
+        'circle-color': {
+        property: 'dbh',
+        type: 'exponential',
+        stops: [
+            [0, 'rgba(236,222,239,0)'],
+            [10, 'rgb(236,222,239)'],
+            [20, 'rgb(208,209,230)'],
+            [30, 'rgb(166,189,219)'],
+            [40, 'rgb(103,169,207)'],
+            [50, 'rgb(28,144,153)'],
+            [60, 'rgb(1,108,89)']
+        ]
+        },
+        'circle-stroke-color': 'white',
+        'circle-stroke-width': 1,
+        'circle-opacity': {
+        stops: [
+            [14, 0],
+            [15, 1]
+        ]
+        }
+    }
+    }, 'waterway-label');
+    });
+
+    function buildLocationList(data) {
+        data.features.forEach(function(tweet, i){
+          /**
+           * Create a shortcut for `tweet.properties`,
+           * which will be used several times below.
+          **/
+          var prop = tweet.properties;
+
+          /* Add a new listing section to the sidebar. */
+          var listings = document.getElementById('listings');
+          var listing = listings.appendChild(document.createElement('div'));
+          /* Assign a unique `id` to the listing. */
+          listing.id = "listing-" + prop.id;
+          /* Assign the `item` class to each listing for styling. */
+          listing.className = 'item';
+
+          /* Add the link to the individual listing created above. */
+          var link = listing.appendChild(document.createElement('a'));
+          link.href = '#';
+          link.className = 'title';
+          link.id = "link-" + prop.id;
+          link.innerHTML = prop.address;
+
+          /* Add details to the individual listing. */
+          var details = listing.appendChild(document.createElement('div'));
+          details.innerHTML = prop.city;
+          if (prop.phone) {
+            details.innerHTML += ' · ' + prop.phoneFormatted;
+          }
+
+          /**
+           * Listen to the element and when it is clicked, do four things:
+           * 1. Update the `currentFeature` to the store associated with the clicked link
+           * 2. Fly to the point
+           * 3. Close all other popups and display popup for clicked store
+           * 4. Highlight listing in sidebar (and remove highlight for all other listings)
+          **/
+          link.addEventListener('click', function(e){
+            for (var i=0; i < data.features.length; i++) {
+              if (this.id === "link-" + data.features[i].properties.id) {
+                var clickedListing = data.features[i];
+                flyToStore(clickedListing);
+                createPopUp(clickedListing);
+              }
+            }
+            var activeItem = document.getElementsByClassName('active');
+            if (activeItem[0]) {
+              activeItem[0].classList.remove('active');
+            }
+            this.parentNode.classList.add('active');
+          });
+        });
+      }
+    
+// reads in a json file to store as a variable
+function loadJSONFile(callback) {   
+   var xmlobj = new XMLHttpRequest();
+   xmlobj.overrideMimeType("application/json");
+   xmlobj.open('GET', './trees.geojson', true); // Provide complete path to your json file here. Change true to false for synchronous loading.
+   xmlobj.onreadystatechange = function () {
+         if (xmlobj.readyState == 4 && (xmlobj.status == "200" || xmlobj.status == "0")) {
+           // Required use of an anonymous callback as .open will NOT return a value but simply returns undefined in asynchronous mode
+           callback(xmlobj.responseText);
+         }
+   };
+   xmlobj.send(null);  
+}
+
+    
+    map.on('click', 'trees-point', function(e) {
+    new mapboxgl.Popup()
+        .setLngLat(e.features[0].geometry.coordinates)
+        .setHTML('<blockquote class="twitter-tweet"><p lang="en" dir="ltr"><a href="https://t.co/zmnk34Ny23"></a></p>&mdash;<a href="https://twitter.com/realDonaldTrump/status/1332552283553476608?ref_src=twsrc%5Etfw"></a></blockquote>')
+        .addTo(map);
+        twttr.widgets.load()   
+    });
+  </script>
+</body>
+</html>
